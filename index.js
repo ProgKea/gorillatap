@@ -8,9 +8,6 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
-const FONT_SIZE = 48;
-const BACKGROUND = "#181818";
-const FOREGROUND = "white";
 function getElementByIdOrError(id) {
     const element = document.getElementById(id);
     if (element === null) {
@@ -24,11 +21,11 @@ function containsSpecialChar(x) {
 function removeNonAlphabetic(x) {
     return x.split("").filter(c => !containsSpecialChar(c)).join("");
 }
-function stringDiffMap(a, b) {
-    let diff = new Map;
+function stringDiffIdx(a, b) {
+    let diff = [];
     for (let i = 0; i < a.length; ++i) {
         if (a[i] != b[i]) {
-            diff.set(i, a[i]);
+            diff.push(i);
         }
     }
     return diff;
@@ -52,19 +49,29 @@ function filterWords(words, config) {
     return words;
 }
 class Gorilla {
-    constructor() {
+    constructor(ctx) {
         this.userInput = "";
-        this.wordsArr = [];
-        this.wordsStr = "";
+        this.words = "";
         this.config = {
-            language: "de",
-            wordCount: 5,
+            language: "en",
+            wordCount: 10,
             maxWordsLength: 5,
             noSpecialChars: true,
             noCapitalization: true,
         };
+        this.theme = {
+            backgroundColor: "#101010",
+            foregroundColor: "white",
+            currentColor: "yellow",
+            wrongColor: "red",
+            rightColor: "green",
+            font: "iosevka",
+            fontSize: 48,
+        };
         this.time = 0;
         this.keysPressed = 0;
+        this.wpm = 0;
+        this.ctx = ctx;
     }
     popBackInput() {
         this.userInput = this.userInput.slice(0, this.userInput.length - 1);
@@ -90,68 +97,62 @@ class Gorilla {
     reset() {
         return __awaiter(this, void 0, void 0, function* () {
             this.userInput = "";
-            this.wordsArr = yield getRandomWords(this.config);
-            this.wordsArr = filterWords(this.wordsArr, this.config);
-            this.wordsStr = this.wordsArr.join(" ");
+            let wordsArr = yield getRandomWords(this.config);
+            this.words = filterWords(wordsArr, this.config).join(" ");
             this.keysPressed = 0;
+            this.ctx.font = `${this.theme.fontSize}px ${this.theme.font}`;
         });
     }
-    render(ctx) {
-        const spaceWidth = ctx.measureText(" ").width;
-        const canvasWidth = ctx.canvas.width;
-        const canvasHeight = ctx.canvas.height;
-        ctx.fillStyle = BACKGROUND;
-        ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-        ctx.fillStyle = FOREGROUND;
-        let wordX = 0;
-        let wordY = FONT_SIZE;
-        let currentIdx = 0;
-        let currentCharColor = "yellow";
-        for (let i = 0; i < this.wordsArr.length; ++i) {
-            const word = this.wordsArr[i];
-            const wordWidth = ctx.measureText(word).width;
-            if (wordX + wordWidth + spaceWidth >= canvasWidth) {
-                wordX = 0;
-                wordY += FONT_SIZE;
+    render() {
+        const spaceWidth = this.ctx.measureText(" ").width;
+        const canvasWidth = this.ctx.canvas.width;
+        const canvasHeight = this.ctx.canvas.height;
+        this.ctx.fillStyle = this.theme.backgroundColor;
+        this.ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+        const chars = this.words.split("");
+        let charX = 0;
+        let charY = this.theme.fontSize;
+        for (let i = 0; i < chars.length; ++i) {
+            const wordFromI = this.words.slice(i);
+            const word = wordFromI.slice(0, wordFromI.search(" "));
+            const wordWidth = this.ctx.measureText(word).width;
+            if (charX + wordWidth >= canvasWidth) {
+                charX = 0;
+                charY += this.theme.fontSize;
             }
-            let charX = 0;
-            for (let j = 0; j < word.length; ++j) {
-                const c = word[j];
-                const charWidth = ctx.measureText(c).width;
-                const expected = this.wordsStr.slice(0, this.userInput.length);
-                const diffMap = stringDiffMap(expected, this.userInput);
-                // TODO: Clean this up
-                if (this.userInput.length == currentIdx) {
-                    ctx.fillStyle = currentCharColor;
-                }
-                else if (currentIdx <= this.userInput.length) {
-                    ctx.fillStyle = "green";
+            const char = chars[i];
+            if (i == this.userInput.length) {
+                this.ctx.fillStyle = this.theme.currentColor;
+            }
+            else if (i > this.userInput.length) {
+                this.ctx.fillStyle = this.theme.foregroundColor;
+            }
+            else {
+                const expected = this.words.slice(0, i + 1);
+                const actual = this.userInput.slice(0, i + 1);
+                const diffIdxs = stringDiffIdx(expected, actual);
+                if (diffIdxs.includes(i)) {
+                    this.ctx.fillStyle = this.theme.wrongColor;
+                    if (this.words[i] == " ") {
+                        this.ctx.fillRect(charX, charY, spaceWidth, -this.theme.fontSize);
+                    }
                 }
                 else {
-                    ctx.fillStyle = FOREGROUND;
+                    this.ctx.fillStyle = this.theme.rightColor;
                 }
-                if (diffMap.has(currentIdx)) {
-                    ctx.fillStyle = "red";
-                }
-                ctx.fillText(c, wordX + charX, wordY);
-                charX += charWidth;
-                currentIdx += 1;
             }
-            // ctx.fillRect(wordX-spaceWidth, wordY, spaceWidth, -2);
-            ctx.fillText(" ", wordX, wordY);
-            wordX += wordWidth + spaceWidth;
-            currentIdx += 1; // new word = new whitespace character
+            this.ctx.fillText(char, charX, charY);
+            charX += this.ctx.measureText(char).width;
         }
     }
-    update(ctx) {
+    update() {
         return __awaiter(this, void 0, void 0, function* () {
-            console.log(this.userInput, this.wordsStr);
-            if (this.userInput == this.wordsStr) {
+            if (this.userInput == this.words) {
                 const tookMin = ((new Date().getTime() - this.time) / 60000);
-                console.log(this.wordsArr.length / tookMin);
+                this.wpm = this.words.length / 5 / tookMin;
                 yield this.reset();
             }
-            this.render(ctx);
+            this.render();
         });
     }
 }
@@ -163,10 +164,10 @@ window.onload = () => __awaiter(void 0, void 0, void 0, function* () {
     if (appCtx === null) {
         throw new Error(`Could not initialize context 2d`);
     }
-    appCtx.font = `${FONT_SIZE}px serif`;
-    const gorilla = new Gorilla();
+    const wpmParagraph = getElementByIdOrError("wpm");
+    const gorilla = new Gorilla(appCtx);
     yield gorilla.reset();
-    gorilla.update(appCtx);
+    gorilla.update();
     document.addEventListener("keydown", (e) => __awaiter(void 0, void 0, void 0, function* () {
         switch (e.key) {
             case "Tab":
@@ -183,12 +184,7 @@ window.onload = () => __awaiter(void 0, void 0, void 0, function* () {
                 break;
         }
         gorilla.input(e.key);
-        gorilla.update(appCtx);
+        gorilla.update();
+        wpmParagraph.innerText = gorilla.wpm.toFixed(2).toString();
     }));
 });
-/*
-  TODO:
-  create a function that filters the words according to the users configuration
-  if the user does not want any special characters in their words let them disable it.
-  if the user does not want any capitalization let them disable that too.
-*/
