@@ -3,6 +3,11 @@
     src: url('../fonts/Poly-Regular.ttf') format('truetype');
 }
 
+@font-face {
+    font-family: 'Iosevka';
+    src: url('../fonts/iosevka-regular.ttf') format('truetype');
+}
+
 body {
     background: #101010;
     font-family: 'Poly';
