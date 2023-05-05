@@ -48,6 +48,17 @@ interface Config {
     noCapitalization: boolean,
 }
 
+const DEFAULT_WORD_COUNT = 10;
+const DEFAULT_WORD_LEN = 10;
+
+const DEFAULT_FOREGROUND = "#ffffff";
+const DEFAULT_BACKGROUND = "#101010";
+const DEFAULT_CURRENT    = "yellow";
+const DEFAULT_WRONG      = "#ff2222";
+const DEFAULT_RIGHT      = "#22ff22";
+const DEFAULT_FONT       = "iosevka";
+const DEFAULT_FONT_SIZE  = 48;
+
 interface Theme {
     currentColor: string,
     foregroundColor: string,
@@ -62,7 +73,7 @@ class Gorilla {
     userInput: string;
     words: string;
     keysPressed: number;
-    time: number;
+    startTime: number;
     config: Config;
     theme: Theme;
     wpm: number;
@@ -73,21 +84,21 @@ class Gorilla {
         this.words = "";
         this.config = {
             language: "en",
-            wordCount: 10,
-            maxWordsLength: 5,
+            wordCount: DEFAULT_WORD_COUNT,
+            maxWordsLength: DEFAULT_WORD_LEN,
             noSpecialChars: true,
             noCapitalization: true,
         };
         this.theme = {
-            backgroundColor: "#101010",
-            foregroundColor: "white",
-            currentColor: "yellow",
-            wrongColor: "red",
-            rightColor: "green",
-            font: "iosevka",
-            fontSize: 48,
+            backgroundColor: DEFAULT_BACKGROUND,
+            foregroundColor: DEFAULT_FOREGROUND,
+            currentColor: DEFAULT_CURRENT,
+            wrongColor: DEFAULT_WRONG,
+            rightColor: DEFAULT_RIGHT,
+            font: DEFAULT_FONT,
+            fontSize: DEFAULT_FONT_SIZE,
         };
-        this.time = 0;
+        this.startTime = 0;
         this.keysPressed = 0;
         this.wpm = 0;
         this.ctx = ctx;
@@ -109,9 +120,8 @@ class Gorilla {
     public input(input: string) {
         if (input.length != 1) return;
         this.userInput += input;
-        if (++this.keysPressed == 1) {
-            console.log("time started");
-            this.time = new Date().getTime();
+        if (++this.keysPressed === 1) {
+            this.startTime = new Date().getTime();
         }
     }
 
@@ -145,7 +155,7 @@ class Gorilla {
             }
 
             const char = chars[i];
-            if (i == this.userInput.length) {
+            if (i === this.userInput.length) {
                 this.ctx.fillStyle = this.theme.currentColor;
             } else if (i > this.userInput.length) {
                 this.ctx.fillStyle = this.theme.foregroundColor;
@@ -156,7 +166,7 @@ class Gorilla {
 
                 if (diffIdxs.includes(i)) {
                     this.ctx.fillStyle = this.theme.wrongColor;
-                    if (this.words[i] == " ") {
+                    if (this.words[i] === " ") {
                         this.ctx.fillRect(charX, charY, spaceWidth, -this.theme.fontSize);
                     }
                 } else {
@@ -170,8 +180,8 @@ class Gorilla {
     }
 
     public async update() {
-        if (this.userInput == this.words) {
-            const tookMin = ((new Date().getTime() - this.time)/60000);
+        if (this.userInput === this.words) {
+            const tookMin = ((new Date().getTime() - this.startTime)/60000);
             this.wpm = this.words.length/5 / tookMin;
             await this.reset();
         }
@@ -179,17 +189,40 @@ class Gorilla {
     }
 }
 
+function oppositeVisibility(x: string): string {
+    console.assert(x === "visible" || x === "hidden");
+    return x === "visible" ? "hidden" : "visible";
+}
+
+function defaultIfNaN(x: number, defaultNumber: number): number {
+    return isNaN(x) ? defaultNumber : x;
+}
+
 window.onload = async () => {
     const app = getElementByIdOrError<HTMLCanvasElement>("app");
-    app.width = 800
-    app.height = 600
+    app.width = 1200;
+    app.height = 600;
 
     const appCtx = app.getContext("2d");
     if (appCtx === null) {
         throw new Error(`Could not initialize context 2d`);
     }
 
-    const wpmParagraph = getElementByIdOrError<HTMLParagraphElement>("wpm");
+    const configMenu = getElementByIdOrError<HTMLDivElement>("menu");
+    const configLang = getElementByIdOrError<HTMLInputElement>("langs");
+    const configWordCount = getElementByIdOrError<HTMLInputElement>("wordCount");
+    const configWordLen = getElementByIdOrError<HTMLInputElement>("wordLen");
+    const configNoCapital = getElementByIdOrError<HTMLInputElement>("noCapital");
+    const configNoSpecial = getElementByIdOrError<HTMLInputElement>("noSpecial");
+
+    const themeForeground = getElementByIdOrError<HTMLInputElement>("foreground");
+    const themeBackground = getElementByIdOrError<HTMLInputElement>("background");
+    const themeWrong = getElementByIdOrError<HTMLInputElement>("wrong");
+    const themeRight = getElementByIdOrError<HTMLInputElement>("right");
+    const themeFont = getElementByIdOrError<HTMLInputElement>("font");
+    const themeFontSize = getElementByIdOrError<HTMLInputElement>("fontSize");
+
+    const wpmText = getElementByIdOrError<HTMLParagraphElement>("wpm");
     const gorilla = new Gorilla(appCtx);
     await gorilla.reset();
     gorilla.update();
@@ -206,11 +239,39 @@ window.onload = async () => {
                     gorilla.popBackInput();
                 }
                 break;
+            case "Escape":
+                configMenu.style.visibility = oppositeVisibility(configMenu.style.visibility);
+
+                app.style.visibility = oppositeVisibility(configMenu.style.visibility);
+                wpmText.style.visibility = oppositeVisibility(configMenu.style.visibility);
+
+                gorilla.config.language = configLang.value;
+                gorilla.config.wordCount = defaultIfNaN(parseInt(configWordCount.value), DEFAULT_WORD_COUNT);
+                gorilla.config.maxWordsLength = defaultIfNaN(parseInt(configWordLen.value), DEFAULT_WORD_LEN);
+                gorilla.config.noCapitalization = configNoCapital.checked;
+                gorilla.config.noSpecialChars = configNoSpecial.checked;
+
+                gorilla.theme.foregroundColor = themeForeground.value;
+                gorilla.theme.backgroundColor = themeBackground.value;
+                document.body.style.background = gorilla.theme.backgroundColor;
+                gorilla.theme.rightColor = themeRight.value;
+                gorilla.theme.wrongColor = themeWrong.value;
+                gorilla.theme.font = themeFont.value;
+                gorilla.theme.fontSize = defaultIfNaN(parseInt(themeFontSize.value), 48);
+
+                if (configMenu.style.visibility === "hidden") {
+                    await gorilla.reset();
+                }
+                break;
         }
 
         gorilla.input(e.key);
         gorilla.update();
-
-        wpmParagraph.innerText = gorilla.wpm.toFixed(2).toString();
+        wpmText.innerText = "Last WPM: "+gorilla.wpm.toFixed(2).toString();
     });
 }
+
+// TODO: add carret
+// TODO: fix tab holding down
+// TODO: implement text scrolling
+// TODO: Find a better way to default the config values
