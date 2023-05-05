@@ -49,11 +49,11 @@ interface Config {
 }
 
 const DEFAULT_WORD_COUNT = 10;
-const DEFAULT_WORD_LEN = 10;
+const DEFAULT_WORD_LEN = 5;
 
 const DEFAULT_FOREGROUND = "#ffffff";
 const DEFAULT_BACKGROUND = "#101010";
-const DEFAULT_CURRENT    = "yellow";
+const DEFAULT_CURRENT    = "#ffff00";
 const DEFAULT_WRONG      = "#ff2222";
 const DEFAULT_RIGHT      = "#22ff22";
 const DEFAULT_FONT       = "iosevka";
@@ -198,6 +198,24 @@ function defaultIfNaN(x: number, defaultNumber: number): number {
     return isNaN(x) ? defaultNumber : x;
 }
 
+function appendInputElementInside(x: HTMLElement, name: string, type: string, value: string, checked?: boolean): HTMLInputElement {
+    const inputElement = document.createElement("input") as HTMLInputElement;
+    inputElement.type = type;
+    inputElement.value = value;
+
+    const label = document.createElement("label") as HTMLLabelElement;
+    label.innerText = name;
+
+    if (typeof checked !== undefined) {
+        inputElement.checked = checked as boolean;
+    }
+
+    x.appendChild(label);
+    x.appendChild(inputElement);
+
+    return inputElement;
+}
+
 window.onload = async () => {
     const app = getElementByIdOrError<HTMLCanvasElement>("app");
     app.width = 1200;
@@ -209,18 +227,40 @@ window.onload = async () => {
     }
 
     const configMenu = getElementByIdOrError<HTMLDivElement>("menu");
-    const configLang = getElementByIdOrError<HTMLInputElement>("langs");
-    const configWordCount = getElementByIdOrError<HTMLInputElement>("wordCount");
-    const configWordLen = getElementByIdOrError<HTMLInputElement>("wordLen");
-    const configNoCapital = getElementByIdOrError<HTMLInputElement>("noCapital");
-    const configNoSpecial = getElementByIdOrError<HTMLInputElement>("noSpecial");
 
-    const themeForeground = getElementByIdOrError<HTMLInputElement>("foreground");
-    const themeBackground = getElementByIdOrError<HTMLInputElement>("background");
-    const themeWrong = getElementByIdOrError<HTMLInputElement>("wrong");
-    const themeRight = getElementByIdOrError<HTMLInputElement>("right");
-    const themeFont = getElementByIdOrError<HTMLInputElement>("font");
-    const themeFontSize = getElementByIdOrError<HTMLInputElement>("fontSize");
+    const supportedLangs = {
+        "en": "English",
+        "de": "German",
+        "es": "Spanish",
+        "zh": "Chinese",
+    };
+    const langLabel = document.createElement("label");
+    langLabel.innerText = "Language";
+    configMenu.appendChild(langLabel);
+    const configLang = document.createElement("select");
+    for (const [abbrev, lang] of Object.entries(supportedLangs)) {
+        const langOption = document.createElement("option") as HTMLOptionElement;
+        langOption.value = abbrev;
+        langOption.innerText = lang;
+        configLang.appendChild(langOption);
+    }
+    configMenu.appendChild(configLang);
+
+    const configWordCount = appendInputElementInside(configMenu, "word count", "number", DEFAULT_WORD_COUNT.toString());
+    const configWordLen = appendInputElementInside(configMenu, "words length", "number", DEFAULT_WORD_LEN.toString());
+    const configNoCapital = appendInputElementInside(configMenu, "no capital characters", "checkbox", "", true);
+    const configNoSpecial = appendInputElementInside(configMenu, "no special characters", "checkbox", "", true);
+
+    const themeForeground = appendInputElementInside(configMenu, "foreground", "color", DEFAULT_FOREGROUND);
+    document.body.style.color = themeForeground.value;
+    const themeBackground = appendInputElementInside(configMenu, "background", "color", DEFAULT_BACKGROUND);
+    document.body.style.background = themeBackground.value;
+    const themeWrong = appendInputElementInside(configMenu, "wrong", "color", DEFAULT_WRONG);
+    const themeRight = appendInputElementInside(configMenu, "right", "color", DEFAULT_RIGHT);
+    const themeCurrent = appendInputElementInside(configMenu, "current", "color", DEFAULT_CURRENT);
+    const themeFont = appendInputElementInside(configMenu, "font", "text", DEFAULT_FONT);
+    const themeFontSize = appendInputElementInside(configMenu, "font size", "number", DEFAULT_FONT_SIZE.toString());
+
 
     const wpmText = getElementByIdOrError<HTMLParagraphElement>("wpm");
     const gorilla = new Gorilla(appCtx);
@@ -253,8 +293,10 @@ window.onload = async () => {
 
                 gorilla.theme.foregroundColor = themeForeground.value;
                 gorilla.theme.backgroundColor = themeBackground.value;
-                document.body.style.background = gorilla.theme.backgroundColor;
+                document.body.style.color = themeForeground.value;
+                document.body.style.background = themeBackground.value;
                 gorilla.theme.rightColor = themeRight.value;
+                gorilla.theme.currentColor = themeCurrent.value;
                 gorilla.theme.wrongColor = themeWrong.value;
                 gorilla.theme.font = themeFont.value;
                 gorilla.theme.fontSize = defaultIfNaN(parseInt(themeFontSize.value), 48);

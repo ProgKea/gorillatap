@@ -9,9 +9,7 @@
 }
 
 body {
-    background: #101010;
     font-family: 'Poly';
-    color: #ffffff;
     margin: auto;
     padding-left: 0px;
     padding-right: 0px;
@@ -25,7 +23,7 @@ h1 {
 
 #menu {
     position: absolute;
-    top: 30%;
+    top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
     visibility: hidden;
