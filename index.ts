@@ -300,6 +300,7 @@ window.onload = async () => {
 
         if (configMenu.style.visibility === "hidden") {
             await gorilla.reset();
+            gorilla.update();
         }
     });
 
