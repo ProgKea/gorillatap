@@ -21,24 +21,25 @@ function stringDiffIdx(a, b) {
     }
     return diff;
 }
-async function getRandomWords(config) {
-    console.assert(config.wordCount >= 0);
+async function getRandomWords(wordCount, maxWordsLength, language) {
+    console.assert(wordCount >= 0);
     const baseUrl = "https://random-word-api.herokuapp.com/word?";
-    const lengthParam = config.maxWordsLength <= 0 ? "" : `length=${config.maxWordsLength}`;
-    const wordsParam = `number=${config.wordCount}`;
-    const languageParam = `lang=${config.language}`;
+    const lengthParam = maxWordsLength <= 0 ? "" : `length=${maxWordsLength}`;
+    const wordsParam = `number=${wordCount}`;
+    const languageParam = `lang=${language}`;
     const response = await fetch([baseUrl, lengthParam, wordsParam, languageParam].join("&"));
     return await response.json();
 }
-function filterWords(words, config) {
-    if (config.noSpecialChars)
+function filterWords(words, noSpecialChars, noCapitalization) {
+    if (noSpecialChars)
         words = words.map(word => removeNonAlphabetic(word));
-    if (config.noCapitalization)
+    if (noCapitalization)
         words = words.map(word => word.toLowerCase());
     return words;
 }
 const DEFAULT_WORD_COUNT = 10;
 const DEFAULT_WORD_LEN = 5;
+const DEFAULT_LANGUAGE = "en";
 const DEFAULT_FOREGROUND = "#ffffff";
 const DEFAULT_BACKGROUND = "#101010";
 const DEFAULT_CURRENT = "#ffff00";
@@ -47,29 +48,22 @@ const DEFAULT_RIGHT = "#22ff22";
 const DEFAULT_FONT = "iosevka";
 const DEFAULT_FONT_SIZE = 48;
 class Gorilla {
-    constructor(ctx) {
+    constructor(ctx, configOptions, themeOptions) {
         this.userInput = "";
         this.words = "";
-        this.config = {
-            language: "en",
-            wordCount: DEFAULT_WORD_COUNT,
-            maxWordsLength: DEFAULT_WORD_LEN,
-            noSpecialChars: true,
-            noCapitalization: true,
-        };
-        this.theme = {
-            backgroundColor: DEFAULT_BACKGROUND,
-            foregroundColor: DEFAULT_FOREGROUND,
-            currentColor: DEFAULT_CURRENT,
-            wrongColor: DEFAULT_WRONG,
-            rightColor: DEFAULT_RIGHT,
-            font: DEFAULT_FONT,
-            fontSize: DEFAULT_FONT_SIZE,
-        };
+        this.config = {};
+        this.theme = {};
+        this.configure(configOptions, themeOptions);
         this.startTime = 0;
         this.keysPressed = 0;
         this.wpm = 0;
         this.ctx = ctx;
+    }
+    configure(configOptions, themeOptions) {
+        setToInputElementVals(this.config, configOptions);
+        setToInputElementVals(this.theme, themeOptions);
+        document.body.style.color = this.theme.foregroundColor;
+        document.body.style.background = this.theme.backgroundColor;
     }
     popBackInput() {
         this.userInput = this.userInput.slice(0, this.userInput.length - 1);
@@ -93,8 +87,8 @@ class Gorilla {
     }
     async reset() {
         this.userInput = "";
-        let wordsArr = await getRandomWords(this.config);
-        this.words = filterWords(wordsArr, this.config).join(" ");
+        let wordsArr = await getRandomWords(this.config.wordCount, this.config.maxWordsLength, this.config.language);
+        this.words = filterWords(wordsArr, this.config.noSpecialChars, this.config.noCapitalization).join(" ");
         this.keysPressed = 0;
         this.ctx.font = `${this.theme.fontSize}px ${this.theme.font}`;
     }
@@ -149,25 +143,46 @@ class Gorilla {
         this.render();
     }
 }
+function setToInputElementVals(x, inputs) {
+    for (let i = 0; i < inputs.length; ++i) {
+        const option = inputs[i];
+        if (option.type === "number") {
+            x[option.name] = parseInt(option.value);
+        }
+        else if (option.type === "checkbox") {
+            x[option.name] = option.checked;
+        }
+        else {
+            x[option.name] = option.value;
+        }
+    }
+}
 function oppositeVisibility(x) {
-    console.assert(x === "visible" || x === "hidden");
     return x === "visible" ? "hidden" : "visible";
 }
-function defaultIfNaN(x, defaultNumber) {
-    return isNaN(x) ? defaultNumber : x;
+function camelToWords(x) {
+    return x.split("").map(c => (c === c.toUpperCase() ? " " + c.toLowerCase() : c)).join("");
 }
-function appendInputElementInside(x, name, type, value, checked) {
+function createInputElement(name, type, value, checked, min, max) {
     const inputElement = document.createElement("input");
     inputElement.type = type;
     inputElement.value = value;
-    const label = document.createElement("label");
-    label.innerText = name;
-    if (typeof checked !== undefined) {
-        inputElement.checked = checked;
+    inputElement.name = name;
+    if (checked !== undefined) {
+        inputElement.checked = true;
     }
-    x.appendChild(label);
-    x.appendChild(inputElement);
+    if (min !== undefined) {
+        inputElement.min = min.toString();
+    }
+    if (max !== undefined) {
+        inputElement.max = max.toString();
+    }
     return inputElement;
+}
+function labelFromInputElement(x) {
+    const label = document.createElement("label");
+    label.innerText = camelToWords(x.name);
+    return label;
 }
 window.onload = async () => {
     const app = getElementByIdOrError("app");
@@ -178,38 +193,55 @@ window.onload = async () => {
         throw new Error(`Could not initialize context 2d`);
     }
     const configMenu = getElementByIdOrError("menu");
+    let configOptions = [];
     const supportedLangs = {
         "en": "English",
         "de": "German",
         "es": "Spanish",
         "zh": "Chinese",
     };
-    const langLabel = document.createElement("label");
-    langLabel.innerText = "Language";
-    configMenu.appendChild(langLabel);
     const configLang = document.createElement("select");
+    configLang.name = "language";
+    configLang.value = DEFAULT_LANGUAGE;
     for (const [abbrev, lang] of Object.entries(supportedLangs)) {
         const langOption = document.createElement("option");
         langOption.value = abbrev;
         langOption.innerText = lang;
         configLang.appendChild(langOption);
     }
-    configMenu.appendChild(configLang);
-    const configWordCount = appendInputElementInside(configMenu, "word count", "number", DEFAULT_WORD_COUNT.toString());
-    const configWordLen = appendInputElementInside(configMenu, "words length", "number", DEFAULT_WORD_LEN.toString());
-    const configNoCapital = appendInputElementInside(configMenu, "no capital characters", "checkbox", "", true);
-    const configNoSpecial = appendInputElementInside(configMenu, "no special characters", "checkbox", "", true);
-    const themeForeground = appendInputElementInside(configMenu, "foreground", "color", DEFAULT_FOREGROUND);
-    document.body.style.color = themeForeground.value;
-    const themeBackground = appendInputElementInside(configMenu, "background", "color", DEFAULT_BACKGROUND);
-    document.body.style.background = themeBackground.value;
-    const themeWrong = appendInputElementInside(configMenu, "wrong", "color", DEFAULT_WRONG);
-    const themeRight = appendInputElementInside(configMenu, "right", "color", DEFAULT_RIGHT);
-    const themeCurrent = appendInputElementInside(configMenu, "current", "color", DEFAULT_CURRENT);
-    const themeFont = appendInputElementInside(configMenu, "font", "text", DEFAULT_FONT);
-    const themeFontSize = appendInputElementInside(configMenu, "font size", "number", DEFAULT_FONT_SIZE.toString());
+    configOptions.push(configLang);
+    configOptions.push(createInputElement("wordCount", "number", DEFAULT_WORD_COUNT.toString(), undefined, 1));
+    configOptions.push(createInputElement("maxWordsLength", "number", DEFAULT_WORD_LEN.toString(), undefined, 1));
+    configOptions.push(createInputElement("noSpecialChars", "checkbox", "", true));
+    configOptions.push(createInputElement("noCapitalization", "checkbox", "", true));
+    let themeOptions = [];
+    themeOptions.push(createInputElement("foregroundColor", "color", DEFAULT_FOREGROUND));
+    themeOptions.push(createInputElement("backgroundColor", "color", DEFAULT_BACKGROUND));
+    themeOptions.push(createInputElement("wrongColor", "color", DEFAULT_WRONG));
+    themeOptions.push(createInputElement("rightColor", "color", DEFAULT_RIGHT));
+    themeOptions.push(createInputElement("currentColor", "color", DEFAULT_CURRENT));
+    themeOptions.push(createInputElement("font", "text", DEFAULT_FONT));
+    themeOptions.push(createInputElement("fontSize", "number", DEFAULT_FONT_SIZE.toString(), undefined, 1));
+    configOptions.forEach(o => {
+        configMenu.appendChild(labelFromInputElement(o));
+        configMenu.appendChild(o);
+    });
+    themeOptions.forEach(o => {
+        configMenu.appendChild(labelFromInputElement(o));
+        configMenu.appendChild(o);
+    });
     const wpmText = getElementByIdOrError("wpm");
-    const gorilla = new Gorilla(appCtx);
+    const gorilla = new Gorilla(appCtx, configOptions, themeOptions);
+    const settingsButton = getElementByIdOrError("settingsButton");
+    settingsButton.addEventListener("click", async () => {
+        configMenu.style.visibility = oppositeVisibility(configMenu.style.visibility);
+        app.style.visibility = oppositeVisibility(configMenu.style.visibility);
+        wpmText.style.visibility = oppositeVisibility(configMenu.style.visibility);
+        gorilla.configure(configOptions, themeOptions);
+        if (configMenu.style.visibility === "hidden") {
+            await gorilla.reset();
+        }
+    });
     await gorilla.reset();
     gorilla.update();
     document.addEventListener("keydown", async (e) => {
@@ -230,23 +262,13 @@ window.onload = async () => {
                 configMenu.style.visibility = oppositeVisibility(configMenu.style.visibility);
                 app.style.visibility = oppositeVisibility(configMenu.style.visibility);
                 wpmText.style.visibility = oppositeVisibility(configMenu.style.visibility);
-                gorilla.config.language = configLang.value;
-                gorilla.config.wordCount = defaultIfNaN(parseInt(configWordCount.value), DEFAULT_WORD_COUNT);
-                gorilla.config.maxWordsLength = defaultIfNaN(parseInt(configWordLen.value), DEFAULT_WORD_LEN);
-                gorilla.config.noCapitalization = configNoCapital.checked;
-                gorilla.config.noSpecialChars = configNoSpecial.checked;
-                gorilla.theme.foregroundColor = themeForeground.value;
-                gorilla.theme.backgroundColor = themeBackground.value;
-                document.body.style.color = themeForeground.value;
-                document.body.style.background = themeBackground.value;
-                gorilla.theme.rightColor = themeRight.value;
-                gorilla.theme.currentColor = themeCurrent.value;
-                gorilla.theme.wrongColor = themeWrong.value;
-                gorilla.theme.font = themeFont.value;
-                gorilla.theme.fontSize = defaultIfNaN(parseInt(themeFontSize.value), 48);
+                gorilla.configure(configOptions, themeOptions);
                 if (configMenu.style.visibility === "hidden") {
                     await gorilla.reset();
                 }
+                break;
+            case " ":
+                e.preventDefault();
                 break;
         }
         gorilla.input(e.key);
@@ -257,4 +279,3 @@ window.onload = async () => {
 // TODO: add carret
 // TODO: fix tab holding down
 // TODO: implement text scrolling
-// TODO: Find a better way to default the config values
