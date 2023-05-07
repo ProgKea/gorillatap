@@ -339,7 +339,9 @@ window.onload = async () => {
                 }
                 break;
             case " ":
-                e.preventDefault();
+                if (configMenu.style.visibility === "hidden") {
+                    e.preventDefault();
+                }
                 break
         }
 
