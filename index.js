@@ -21,6 +21,9 @@ function stringDiffIdx(a, b) {
     }
     return diff;
 }
+function clamp(x, min, max) {
+    return Math.min(Math.max(x, min), max);
+}
 async function getRandomWords(wordCount, maxWordsLength, language) {
     console.assert(wordCount >= 0);
     const baseUrl = "https://random-word-api.herokuapp.com/word?";
@@ -36,6 +39,14 @@ function filterWords(words, noSpecialChars, noCapitalization) {
     if (noCapitalization)
         words = words.map(word => word.toLowerCase());
     return words;
+}
+function getMatchingWordsAsString(a, b) {
+    const bWords = b.split(" ");
+    return a.split(" ").map((word, i) => {
+        if (word === bWords[i]) {
+            return word;
+        }
+    }).join(" ");
 }
 const DEFAULT_WORD_COUNT = 10;
 const DEFAULT_WORD_LEN = 5;
@@ -57,7 +68,10 @@ class Gorilla {
         this.canReset = true;
         this.startTime = 0;
         this.keysPressed = 0;
+        this.mistakes = 0;
         this.wpm = 0;
+        this.rawWpm = 0;
+        this.accuracy = 0;
         this.ctx = ctx;
         this.configure(configOptions, themeOptions);
     }
@@ -85,6 +99,9 @@ class Gorilla {
         if (input.length != 1)
             return;
         this.userInput += input;
+        if (this.userInput[this.userInput.length - 1] !== this.words[this.userInput.length - 1]) {
+            this.mistakes++;
+        }
         if (++this.keysPressed === 1) {
             this.startTime = new Date().getTime();
         }
@@ -97,6 +114,7 @@ class Gorilla {
         let wordsArr = await getRandomWords(this.config.wordCount, this.config.maxWordsLength, this.config.language);
         this.words = filterWords(wordsArr, this.config.noSpecialChars, this.config.noCapitalization).join(" ");
         this.keysPressed = 0;
+        this.mistakes = 0;
         this.canReset = true;
     }
     render() {
@@ -145,9 +163,12 @@ class Gorilla {
         }
     }
     async update() {
-        if (this.userInput === this.words) {
+        if (this.userInput.length === this.words.length) {
             const tookMin = ((new Date().getTime() - this.startTime) / 60000);
-            this.wpm = this.words.length / 5 / tookMin;
+            const totalCharacterCount = this.words.length;
+            this.wpm = getMatchingWordsAsString(this.userInput, this.words).length / 5 / tookMin;
+            this.rawWpm = totalCharacterCount / 5 / tookMin;
+            this.accuracy = ((totalCharacterCount - this.mistakes) / totalCharacterCount) * 100;
             await this.reset();
         }
         this.render();
@@ -157,7 +178,10 @@ function setToInputElementVals(x, inputs) {
     for (let i = 0; i < inputs.length; ++i) {
         const option = inputs[i];
         if (option.type === "number") {
-            x[option.name] = parseInt(option.value);
+            const inputElement = option;
+            const max = parseInt(inputElement.max);
+            const min = parseInt(inputElement.min);
+            x[option.name] = clamp(parseInt(option.value), min, max);
         }
         else if (option.type === "checkbox") {
             x[option.name] = option.checked;
@@ -220,11 +244,11 @@ window.onload = async () => {
         configLang.appendChild(langOption);
     }
     configOptions.push(configLang);
-    configOptions.push(createInputElement("wordCount", "number", DEFAULT_WORD_COUNT.toString(), undefined, 1));
-    configOptions.push(createInputElement("maxWordsLength", "number", DEFAULT_WORD_LEN.toString(), undefined, 1));
+    configOptions.push(createInputElement("wordCount", "number", DEFAULT_WORD_COUNT.toString(), undefined, 1, 100));
+    configOptions.push(createInputElement("maxWordsLength", "number", DEFAULT_WORD_LEN.toString(), undefined, 1, 100));
     configOptions.push(createInputElement("noSpecialChars", "checkbox", "", true));
     configOptions.push(createInputElement("noCapitalization", "checkbox", "", true));
-    configOptions.push(createInputElement("canvasWidth", "number", DEFAULT_CANVAS_WIDTH.toString(), undefined, 1));
+    configOptions.push(createInputElement("canvasWidth", "number", DEFAULT_CANVAS_WIDTH.toString(), undefined, 1, window.innerWidth));
     let themeOptions = [];
     themeOptions.push(createInputElement("foregroundColor", "color", DEFAULT_FOREGROUND));
     themeOptions.push(createInputElement("backgroundColor", "color", DEFAULT_BACKGROUND));
@@ -234,7 +258,7 @@ window.onload = async () => {
     themeOptions.push(createInputElement("currentColor", "color", DEFAULT_CURRENT));
     themeOptions.push(createInputElement("enableCursor", "checkbox", "", true));
     themeOptions.push(createInputElement("font", "text", DEFAULT_FONT));
-    themeOptions.push(createInputElement("fontSize", "number", DEFAULT_FONT_SIZE.toString(), undefined, 1));
+    themeOptions.push(createInputElement("fontSize", "number", DEFAULT_FONT_SIZE.toString(), undefined, 1, 100));
     configOptions.forEach(o => {
         configMenu.appendChild(labelFromInputElement(o));
         configMenu.appendChild(o);
@@ -244,18 +268,9 @@ window.onload = async () => {
         configMenu.appendChild(o);
     });
     const wpmText = getElementByIdOrError("wpm");
+    const rawWpmText = getElementByIdOrError("rawWpm");
+    const accuracyText = getElementByIdOrError("accuracy");
     const gorilla = new Gorilla(appCtx, configOptions, themeOptions);
-    const settingsButton = getElementByIdOrError("settingsButton");
-    settingsButton.addEventListener("click", async () => {
-        configMenu.style.visibility = oppositeVisibility(configMenu.style.visibility);
-        app.style.visibility = oppositeVisibility(configMenu.style.visibility);
-        wpmText.style.visibility = oppositeVisibility(configMenu.style.visibility);
-        gorilla.configure(configOptions, themeOptions);
-        if (configMenu.style.visibility === "hidden") {
-            await gorilla.reset();
-            gorilla.update();
-        }
-    });
     await gorilla.reset();
     gorilla.update();
     document.addEventListener("keydown", async (e) => {
@@ -276,6 +291,8 @@ window.onload = async () => {
                 configMenu.style.visibility = oppositeVisibility(configMenu.style.visibility);
                 app.style.visibility = oppositeVisibility(configMenu.style.visibility);
                 wpmText.style.visibility = oppositeVisibility(configMenu.style.visibility);
+                rawWpmText.style.visibility = oppositeVisibility(configMenu.style.visibility);
+                accuracyText.style.visibility = oppositeVisibility(configMenu.style.visibility);
                 gorilla.configure(configOptions, themeOptions);
                 if (configMenu.style.visibility === "hidden") {
                     await gorilla.reset();
@@ -290,7 +307,7 @@ window.onload = async () => {
         gorilla.input(e.key);
         gorilla.update();
         wpmText.innerText = "Last WPM: " + gorilla.wpm.toFixed(2).toString();
+        rawWpmText.innerText = "Last raw WPM: " + gorilla.rawWpm.toFixed(2).toString();
+        accuracyText.innerText = "Last accuracy: " + gorilla.accuracy.toFixed(2).toString() + "%";
     });
 };
-// TODO: implement text scrolling or something else that will have the same result
-// TODO: add accuracy percentage

@@ -24,6 +24,10 @@ function stringDiffIdx(a: string, b: string): number[] {
     return diff;
 }
 
+function clamp(x: number, min: number, max: number): number {
+    return Math.min(Math.max(x, min), max);
+}
+
 async function getRandomWords(wordCount: number, maxWordsLength: number, language: string): Promise<string[]> {
     console.assert(wordCount >= 0);
     const baseUrl = "https://random-word-api.herokuapp.com/word?";
@@ -40,6 +44,15 @@ function filterWords(words: string[], noSpecialChars: boolean, noCapitalization:
     return words;
 }
 
+function getMatchingWordsAsString(a: string, b: string): string {
+    const bWords = b.split(" ");
+    return a.split(" ").map((word, i) => {
+        if (word === bWords[i]) {
+            return word;
+        }
+    }).join(" ");
+}
+
 interface Config {
     language: string,
     wordCount: number,
@@ -49,9 +62,9 @@ interface Config {
     canvasWidth: number,
 }
 
-const DEFAULT_WORD_COUNT = 10;
-const DEFAULT_WORD_LEN = 5;
-const DEFAULT_LANGUAGE = "en";
+const DEFAULT_WORD_COUNT   = 10;
+const DEFAULT_WORD_LEN     = 5;
+const DEFAULT_LANGUAGE     = "en";
 const DEFAULT_CANVAS_WIDTH = 1200;
 
 const DEFAULT_FOREGROUND = "#e4e4ef";
@@ -78,10 +91,13 @@ class Gorilla {
     userInput: string;
     words: string;
     keysPressed: number;
+    mistakes: number;
     startTime: number;
     config: Config;
     theme: Theme;
     wpm: number;
+    rawWpm: number;
+    accuracy: number;
     ctx: CanvasRenderingContext2D;
     canReset: boolean;
 
@@ -93,7 +109,10 @@ class Gorilla {
         this.canReset = true;
         this.startTime = 0;
         this.keysPressed = 0;
+        this.mistakes = 0;
         this.wpm = 0;
+        this.rawWpm = 0;
+        this.accuracy = 0;
         this.ctx = ctx;
         this.configure(configOptions, themeOptions);
     }
@@ -125,6 +144,9 @@ class Gorilla {
     public input(input: string) {
         if (input.length != 1) return;
         this.userInput += input;
+        if (this.userInput[this.userInput.length-1] !== this.words[this.userInput.length-1]) {
+            this.mistakes++;
+        }
         if (++this.keysPressed === 1) {
             this.startTime = new Date().getTime();
         }
@@ -137,6 +159,7 @@ class Gorilla {
         let wordsArr = await getRandomWords(this.config.wordCount, this.config.maxWordsLength, this.config.language);
         this.words = filterWords(wordsArr, this.config.noSpecialChars, this.config.noCapitalization).join(" ");
         this.keysPressed = 0;
+        this.mistakes = 0;
         this.canReset = true;
     }
 
@@ -189,9 +212,15 @@ class Gorilla {
     }
 
     public async update() {
-        if (this.userInput === this.words) {
+        if (this.userInput.length === this.words.length) {
             const tookMin = ((new Date().getTime() - this.startTime)/60000);
-            this.wpm = this.words.length/5 / tookMin;
+            const totalCharacterCount = this.words.length;
+
+            this.wpm = getMatchingWordsAsString(this.userInput, this.words).length/5 / tookMin;
+            this.rawWpm = totalCharacterCount/5 / tookMin;
+
+            this.accuracy = ((totalCharacterCount - this.mistakes) / totalCharacterCount) * 100;
+
             await this.reset();
         }
         this.render();
@@ -202,7 +231,10 @@ function setToInputElementVals<T>(x: T, inputs: (HTMLInputElement | HTMLSelectEl
     for (let i = 0; i < inputs.length; ++i) {
         const option = inputs[i];
         if (option.type === "number") {
-            (x[option.name as keyof T] as any) = parseInt(option.value);
+            const inputElement = option as HTMLInputElement;
+            const max = parseInt(inputElement.max);
+            const min = parseInt(inputElement.min);
+            (x[option.name as keyof T] as any) = clamp(parseInt(option.value), min, max);
         } else if (option.type === "checkbox") {
             (x[option.name as keyof T] as any) = (option as HTMLInputElement).checked;
         } else {
@@ -264,6 +296,7 @@ window.onload = async () => {
         "es": "Spanish",
         "zh": "Chinese",
     };
+
     const configLang = document.createElement("select") as HTMLSelectElement;
     configLang.name = "language";
     configLang.value = DEFAULT_LANGUAGE;
@@ -276,11 +309,11 @@ window.onload = async () => {
     }
 
     configOptions.push(configLang);
-    configOptions.push(createInputElement("wordCount", "number", DEFAULT_WORD_COUNT.toString(), undefined, 1));
-    configOptions.push(createInputElement("maxWordsLength", "number", DEFAULT_WORD_LEN.toString(), undefined, 1));
+    configOptions.push(createInputElement("wordCount", "number", DEFAULT_WORD_COUNT.toString(), undefined, 1, 100));
+    configOptions.push(createInputElement("maxWordsLength", "number", DEFAULT_WORD_LEN.toString(), undefined, 1, 100));
     configOptions.push(createInputElement("noSpecialChars", "checkbox", "", true));
     configOptions.push(createInputElement("noCapitalization", "checkbox", "", true));
-    configOptions.push(createInputElement("canvasWidth", "number", DEFAULT_CANVAS_WIDTH.toString(), undefined, 1));
+    configOptions.push(createInputElement("canvasWidth", "number", DEFAULT_CANVAS_WIDTH.toString(), undefined, 1, window.innerWidth));
 
     let themeOptions: (HTMLInputElement | HTMLSelectElement)[] = [];
     themeOptions.push(createInputElement("foregroundColor", "color", DEFAULT_FOREGROUND));
@@ -291,7 +324,7 @@ window.onload = async () => {
     themeOptions.push(createInputElement("currentColor", "color", DEFAULT_CURRENT));
     themeOptions.push(createInputElement("enableCursor", "checkbox", "", true));
     themeOptions.push(createInputElement("font", "text", DEFAULT_FONT));
-    themeOptions.push(createInputElement("fontSize", "number", DEFAULT_FONT_SIZE.toString(), undefined, 1));
+    themeOptions.push(createInputElement("fontSize", "number", DEFAULT_FONT_SIZE.toString(), undefined, 1, 100));
 
     configOptions.forEach(o => {
         configMenu.appendChild(labelFromInputElement(o));
@@ -304,21 +337,9 @@ window.onload = async () => {
     });
 
     const wpmText = getElementByIdOrError<HTMLParagraphElement>("wpm");
+    const rawWpmText = getElementByIdOrError<HTMLParagraphElement>("rawWpm");
+    const accuracyText = getElementByIdOrError<HTMLParagraphElement>("accuracy");
     const gorilla = new Gorilla(appCtx, configOptions, themeOptions);
-
-    const settingsButton = getElementByIdOrError<HTMLButtonElement>("settingsButton");
-    settingsButton.addEventListener("click", async () => {
-        configMenu.style.visibility = oppositeVisibility(configMenu.style.visibility);
-        app.style.visibility = oppositeVisibility(configMenu.style.visibility);
-        wpmText.style.visibility = oppositeVisibility(configMenu.style.visibility);
-
-        gorilla.configure(configOptions, themeOptions);
-
-        if (configMenu.style.visibility === "hidden") {
-            await gorilla.reset();
-            gorilla.update();
-        }
-    });
 
     await gorilla.reset();
     gorilla.update();
@@ -339,6 +360,8 @@ window.onload = async () => {
                 configMenu.style.visibility = oppositeVisibility(configMenu.style.visibility);
                 app.style.visibility = oppositeVisibility(configMenu.style.visibility);
                 wpmText.style.visibility = oppositeVisibility(configMenu.style.visibility);
+                rawWpmText.style.visibility = oppositeVisibility(configMenu.style.visibility);
+                accuracyText.style.visibility = oppositeVisibility(configMenu.style.visibility);
 
                 gorilla.configure(configOptions, themeOptions);
 
@@ -356,8 +379,7 @@ window.onload = async () => {
         gorilla.input(e.key);
         gorilla.update();
         wpmText.innerText = "Last WPM: "+gorilla.wpm.toFixed(2).toString();
+        rawWpmText.innerText = "Last raw WPM: "+gorilla.rawWpm.toFixed(2).toString();
+        accuracyText.innerText = "Last accuracy: "+gorilla.accuracy.toFixed(2).toString()+"%";
     });
 }
-
-// TODO: implement text scrolling or something else that will have the same result
-// TODO: add accuracy percentage
