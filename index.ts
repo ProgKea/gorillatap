@@ -46,11 +46,13 @@ interface Config {
     maxWordsLength: number,
     noSpecialChars: boolean,
     noCapitalization: boolean,
+    canvasWidth: number,
 }
 
 const DEFAULT_WORD_COUNT = 10;
 const DEFAULT_WORD_LEN = 5;
 const DEFAULT_LANGUAGE = "en";
+const DEFAULT_CANVAS_WIDTH = 1200;
 
 const DEFAULT_FOREGROUND = "#e4e4ef";
 const DEFAULT_BACKGROUND = "#181818";
@@ -61,6 +63,7 @@ const DEFAULT_FONT       = "Poly";
 const DEFAULT_FONT_SIZE  = 48;
 
 interface Theme {
+    cursorColor: string,
     currentColor: string,
     foregroundColor: string,
     backgroundColor: string,
@@ -87,12 +90,12 @@ class Gorilla {
         this.words = "";
         this.config = {} as Config;
         this.theme = {} as Theme;
-        this.configure(configOptions, themeOptions);
         this.canReset = true;
         this.startTime = 0;
         this.keysPressed = 0;
         this.wpm = 0;
         this.ctx = ctx;
+        this.configure(configOptions, themeOptions);
     }
 
     public configure(configOptions: (HTMLInputElement | HTMLSelectElement)[],
@@ -101,6 +104,9 @@ class Gorilla {
         setToInputElementVals<Theme>(this.theme, themeOptions);
         document.body.style.color = this.theme.foregroundColor;
         document.body.style.background = this.theme.backgroundColor;
+
+        this.ctx.canvas.width = this.config.canvasWidth;
+        this.ctx.font = `${this.theme.fontSize}px ${this.theme.font}`;
     }
 
     public popBackInput() {
@@ -131,17 +137,14 @@ class Gorilla {
         let wordsArr = await getRandomWords(this.config.wordCount, this.config.maxWordsLength, this.config.language);
         this.words = filterWords(wordsArr, this.config.noSpecialChars, this.config.noCapitalization).join(" ");
         this.keysPressed = 0;
-        this.ctx.font = `${this.theme.fontSize}px ${this.theme.font}`;
         this.canReset = true;
     }
 
     private render() {
         const spaceWidth = this.ctx.measureText(" ").width;
-        const canvasWidth = this.ctx.canvas.width;
-        const canvasHeight = this.ctx.canvas.height;
 
         this.ctx.fillStyle = this.theme.backgroundColor;
-        this.ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+        this.ctx.fillRect(0, 0, this.ctx.canvas.width, this.ctx.canvas.height);
 
         const chars = this.words.split("");
         let charX = 0;
@@ -150,7 +153,7 @@ class Gorilla {
             const wordFromI = this.words.slice(i);
             const word = wordFromI.slice(0, wordFromI.search(" "));
             const wordWidth = this.ctx.measureText(word).width;
-            if (spaceWidth*2+charX+wordWidth >= canvasWidth) {
+            if (spaceWidth*2+charX+wordWidth >= this.ctx.canvas.width) {
                 charX = 0;
                 charY += this.theme.fontSize;
             }
@@ -158,8 +161,11 @@ class Gorilla {
             const char = chars[i];
             const charWidth = this.ctx.measureText(char).width;
             if (i === this.userInput.length) {
+                if (this.theme.enableCursor) {
+                    this.ctx.fillStyle = this.theme.cursorColor;
+                    this.ctx.fillRect(charX, charY, this.theme.fontSize/10, -this.theme.fontSize);
+                }
                 this.ctx.fillStyle = this.theme.currentColor;
-                if (this.theme.enableCursor) this.ctx.fillRect(charX, charY, this.theme.fontSize/10, -this.theme.fontSize);
             } else if (i > this.userInput.length) {
                 this.ctx.fillStyle = this.theme.foregroundColor;
             } else {
@@ -219,13 +225,13 @@ function createInputElement(name: string, type: string, value: string, checked?:
     inputElement.value = value;
     inputElement.name = name;
 
-    if (checked !== undefined) {
+    if (checked) {
         inputElement.checked = true;
     }
-    if (min !== undefined) {
+    if (min) {
         inputElement.min = min.toString();
     }
-    if (max !== undefined) {
+    if (max) {
         inputElement.max = max.toString();
     }
 
@@ -274,12 +280,14 @@ window.onload = async () => {
     configOptions.push(createInputElement("maxWordsLength", "number", DEFAULT_WORD_LEN.toString(), undefined, 1));
     configOptions.push(createInputElement("noSpecialChars", "checkbox", "", true));
     configOptions.push(createInputElement("noCapitalization", "checkbox", "", true));
+    configOptions.push(createInputElement("canvasWidth", "number", DEFAULT_CANVAS_WIDTH.toString(), undefined, 1));
 
     let themeOptions: (HTMLInputElement | HTMLSelectElement)[] = [];
     themeOptions.push(createInputElement("foregroundColor", "color", DEFAULT_FOREGROUND));
     themeOptions.push(createInputElement("backgroundColor", "color", DEFAULT_BACKGROUND));
     themeOptions.push(createInputElement("wrongColor", "color", DEFAULT_WRONG));
     themeOptions.push(createInputElement("rightColor", "color", DEFAULT_RIGHT));
+    themeOptions.push(createInputElement("cursorColor", "color", DEFAULT_CURRENT));
     themeOptions.push(createInputElement("currentColor", "color", DEFAULT_CURRENT));
     themeOptions.push(createInputElement("enableCursor", "checkbox", "", true));
     themeOptions.push(createInputElement("font", "text", DEFAULT_FONT));
@@ -351,4 +359,5 @@ window.onload = async () => {
     });
 }
 
-// TODO: implement text scrolling
+// TODO: implement text scrolling or something else that will have the same result
+// TODO: add accuracy percentage
