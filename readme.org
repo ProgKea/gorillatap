@@ -10,7 +10,7 @@ To toggle the configuration menu press escape or press the button in the bottom 
 ** Developing
 
 To get started developing:
-#+BEGIN_SRC shell
+#+BEGIN_SRC console
 $ git clone https://github.com/ProgKea/gorillatap
 $ npm install
 $ npx tsc -watch
@@ -18,3 +18,10 @@ $ live-server or $ python -m http.server
 #+END_SRC
 
 The only dependency is typescript so the installation shouldn't take too long.
+
+*** Nix
+
+If you are using the nix package manager you can do the following to install everything you need to develop:
+#+BEGIN_SRC console
+$ nix develop
+#+END_SRC
