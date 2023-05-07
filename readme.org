@@ -1,0 +1,8 @@
+* Gorillatap
+
+A simple yet adaptable typing assessment inspired by [[https://monkeytype.com/][monkeytype]].
+
+** Usage
+
+Go to https://progkea.github.io/gorillatap/ and type the words you see.
+To toggle the configuration menu press escape or press the button in the bottom right corner.
