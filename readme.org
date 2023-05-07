@@ -6,3 +6,15 @@ A simple yet adaptable typing assessment inspired by [[https://monkeytype.com/][
 
 Go to https://progkea.github.io/gorillatap/ and type the words you see.
 To toggle the configuration menu press escape or press the button in the bottom right corner.
+
+** Developing
+
+To get started developing:
+#+BEGIN_SRC shell
+$ git clone https://github.com/ProgKea/gorillatap
+$ npm install
+$ npx tsc -watch
+$ live-server or $ python -m http.server
+#+END_SRC
+
+The only dependency is typescript so the installation shouldn't take too long.
