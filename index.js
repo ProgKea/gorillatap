@@ -40,12 +40,12 @@ function filterWords(words, noSpecialChars, noCapitalization) {
 const DEFAULT_WORD_COUNT = 10;
 const DEFAULT_WORD_LEN = 5;
 const DEFAULT_LANGUAGE = "en";
-const DEFAULT_FOREGROUND = "#ffffff";
-const DEFAULT_BACKGROUND = "#101010";
-const DEFAULT_CURRENT = "#ffff00";
-const DEFAULT_WRONG = "#ff2222";
-const DEFAULT_RIGHT = "#22ff22";
-const DEFAULT_FONT = "iosevka";
+const DEFAULT_FOREGROUND = "#e4e4ef";
+const DEFAULT_BACKGROUND = "#181818";
+const DEFAULT_CURRENT = "#ffdd33";
+const DEFAULT_WRONG = "#f43841";
+const DEFAULT_RIGHT = "#73c936";
+const DEFAULT_FONT = "Poly";
 const DEFAULT_FONT_SIZE = 48;
 class Gorilla {
     constructor(ctx, configOptions, themeOptions) {
@@ -54,6 +54,7 @@ class Gorilla {
         this.config = {};
         this.theme = {};
         this.configure(configOptions, themeOptions);
+        this.canReset = true;
         this.startTime = 0;
         this.keysPressed = 0;
         this.wpm = 0;
@@ -86,11 +87,15 @@ class Gorilla {
         }
     }
     async reset() {
+        if (!this.canReset)
+            return;
+        this.canReset = false;
         this.userInput = "";
         let wordsArr = await getRandomWords(this.config.wordCount, this.config.maxWordsLength, this.config.language);
         this.words = filterWords(wordsArr, this.config.noSpecialChars, this.config.noCapitalization).join(" ");
         this.keysPressed = 0;
         this.ctx.font = `${this.theme.fontSize}px ${this.theme.font}`;
+        this.canReset = true;
     }
     render() {
         const spaceWidth = this.ctx.measureText(" ").width;
@@ -105,13 +110,16 @@ class Gorilla {
             const wordFromI = this.words.slice(i);
             const word = wordFromI.slice(0, wordFromI.search(" "));
             const wordWidth = this.ctx.measureText(word).width;
-            if (charX + wordWidth >= canvasWidth) {
+            if (spaceWidth * 2 + charX + wordWidth >= canvasWidth) {
                 charX = 0;
                 charY += this.theme.fontSize;
             }
             const char = chars[i];
+            const charWidth = this.ctx.measureText(char).width;
             if (i === this.userInput.length) {
                 this.ctx.fillStyle = this.theme.currentColor;
+                if (this.theme.enableCursor)
+                    this.ctx.fillRect(charX, charY, this.theme.fontSize / 10, -this.theme.fontSize);
             }
             else if (i > this.userInput.length) {
                 this.ctx.fillStyle = this.theme.foregroundColor;
@@ -131,7 +139,7 @@ class Gorilla {
                 }
             }
             this.ctx.fillText(char, charX, charY);
-            charX += this.ctx.measureText(char).width;
+            charX += charWidth;
         }
     }
     async update() {
@@ -220,6 +228,7 @@ window.onload = async () => {
     themeOptions.push(createInputElement("wrongColor", "color", DEFAULT_WRONG));
     themeOptions.push(createInputElement("rightColor", "color", DEFAULT_RIGHT));
     themeOptions.push(createInputElement("currentColor", "color", DEFAULT_CURRENT));
+    themeOptions.push(createInputElement("enableCursor", "checkbox", "", true));
     themeOptions.push(createInputElement("font", "text", DEFAULT_FONT));
     themeOptions.push(createInputElement("fontSize", "number", DEFAULT_FONT_SIZE.toString(), undefined, 1));
     configOptions.forEach(o => {
@@ -278,5 +287,4 @@ window.onload = async () => {
     });
 };
 // TODO: add carret
-// TODO: fix tab holding down
 // TODO: implement text scrolling
