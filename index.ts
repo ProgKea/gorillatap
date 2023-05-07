@@ -351,5 +351,4 @@ window.onload = async () => {
     });
 }
 
-// TODO: add carret
 // TODO: implement text scrolling

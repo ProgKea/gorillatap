@@ -288,5 +288,4 @@ window.onload = async () => {
         wpmText.innerText = "Last WPM: " + gorilla.wpm.toFixed(2).toString();
     });
 };
-// TODO: add carret
 // TODO: implement text scrolling
