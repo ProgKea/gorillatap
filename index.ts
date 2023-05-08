@@ -370,7 +370,7 @@ window.onload = async () => {
                 }
                 break;
             case " ":
-                if (configMenu.style.visibility === "hidden") {
+                if (configMenu.style.visibility !== "visble") {
                     e.preventDefault();
                 }
                 break
